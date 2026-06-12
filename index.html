@@ -388,7 +388,7 @@ const TEAMS = [{
   name: "VizTech",
   lead: "Micah Dickerson"
 }];
-const SENIOR_MANAGER = "Seth Olshfski";
+const GLOBAL_LEADS = ["Seth Olshfski", "April Barrett-Kelly"];
 const CATEGORIES = ["Growth", "Operational Excellence", "Customer", "People", "Innovation", "Cost & Efficiency"];
 const PROGRESS = [{
   id: "not-started",
@@ -666,11 +666,26 @@ function MiniBar({
 
 /* ───────────────────────── roster helpers ───────────────────────── */
 
-// roster[teamId] = [names...]; leads are always implicitly members of their team.
+// Built-in members that always belong to a team, independent of demo data or
+// anything a lead adds. Leads are implicit members of their own team too.
+const PERMANENT_MEMBERS = {
+  purchasing: ["Amy Winer"]
+};
+
+// roster[teamId] = [names...] added by leads; leads + permanent members are always included.
 const teamMembers = (db, teamId) => {
   const team = TEAMS.find(t => t.id === teamId);
+  const permanent = PERMANENT_MEMBERS[teamId] || [];
   const extra = db.roster && db.roster[teamId] || [];
-  return [team.lead, ...extra.filter(n => n !== team.lead)];
+  const seen = new Set([team.lead]);
+  const out = [team.lead];
+  [...permanent, ...extra].forEach(n => {
+    if (!seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    }
+  });
+  return out;
 };
 
 // returns {name, role, teamId} for everyone selectable on the login screen
@@ -682,19 +697,25 @@ function buildDirectory(db) {
       role: "lead",
       teamId: t.id
     });
-    (db.roster && db.roster[t.id] || []).forEach(n => {
-      if (n !== t.lead) dir.push({
-        name: n,
-        role: "member",
-        teamId: t.id
-      });
+    const permanent = PERMANENT_MEMBERS[t.id] || [];
+    const extra = db.roster && db.roster[t.id] || [];
+    const seen = new Set([t.lead]);
+    [...permanent, ...extra].forEach(n => {
+      if (!seen.has(n)) {
+        seen.add(n);
+        dir.push({
+          name: n,
+          role: "member",
+          teamId: t.id
+        });
+      }
     });
   });
-  dir.push({
-    name: SENIOR_MANAGER,
+  GLOBAL_LEADS.forEach(n => dir.push({
+    name: n,
     role: "senior",
     teamId: null
-  });
+  }));
   return dir;
 }
 
@@ -704,7 +725,7 @@ function buildDemoData(quarter) {
   const qid = quarterId(quarter);
   const roster = {
     "plan-intel": ["Priya Nair", "Diego Alvarez", "Hannah Cho"],
-    "purchasing": ["Marcus Webb", "Lena Fischer"],
+    "purchasing": ["Amy Winer", "Marcus Webb", "Lena Fischer"],
     "viztech": ["Aisha Rahman", "Tom Becker", "Sofia Russo"]
   };
   const tg = []; // team goals
@@ -792,6 +813,22 @@ function buildDemoData(quarter) {
     kpi: "All three contracts signed at improved terms",
     linkedTeamGoal: pp1.id,
     progress: "on-track"
+  }, {
+    id: id(),
+    teamId: "purchasing",
+    owner: "Amy Winer",
+    goal: "Consolidate the tail-spend vendor list",
+    kpi: "Reduce active vendors by 15% without service gaps",
+    linkedTeamGoal: pp1.id,
+    progress: "on-track"
+  }, {
+    id: id(),
+    teamId: "purchasing",
+    owner: "Amy Winer",
+    goal: "Digitize the supplier onboarding packet",
+    kpi: "Onboarding fully paperless for new vendors",
+    linkedTeamGoal: pp2.id,
+    progress: "complete"
   }, {
     id: id(),
     teamId: "purchasing",
@@ -1000,18 +1037,20 @@ function Login({
       padding: 14,
       display: "flex",
       alignItems: "center",
-      gap: 12
+      gap: 12,
+      flexWrap: "wrap"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      flex: 1,
       font: `700 14px ${sans}`,
       color: C.ink,
-      paddingLeft: 4
+      paddingLeft: 4,
+      marginRight: "auto"
     }
-  }, "Leadership"), /*#__PURE__*/React.createElement("button", {
+  }, "Leadership"), GLOBAL_LEADS.map(n => /*#__PURE__*/React.createElement("button", {
+    key: n,
     onClick: () => onPick({
-      name: SENIOR_MANAGER,
+      name: n,
       role: "senior",
       teamId: null
     }),
@@ -1021,10 +1060,10 @@ function Login({
       font: `600 14px ${sans}`,
       color: C.ink
     }
-  }, SENIOR_MANAGER), /*#__PURE__*/React.createElement(Pill, {
+  }, n), /*#__PURE__*/React.createElement(Pill, {
     color: C.violet,
     border: C.line2
-  }, "Global Lead")))));
+  }, "Global Lead"))))));
 }
 const loginChip = {
   display: "flex",
@@ -1991,7 +2030,10 @@ function MemberManager({
   }, m), m === team.lead ? /*#__PURE__*/React.createElement(Pill, {
     color: C.cyan,
     border: C.line2
-  }, "Lead \u2014 you") : /*#__PURE__*/React.createElement("button", {
+  }, "Lead \u2014 you") : (PERMANENT_MEMBERS[team.id] || []).includes(m) ? /*#__PURE__*/React.createElement(Pill, {
+    color: C.sub,
+    border: C.line2
+  }, "Permanent") : /*#__PURE__*/React.createElement("button", {
     onClick: () => actions.removeMember(team.id, m),
     style: {
       background: "none",
